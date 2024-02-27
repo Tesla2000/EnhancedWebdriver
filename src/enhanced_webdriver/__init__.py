@@ -1,3 +1,3 @@
-__all__ = ["EnhancedWebDriver"]
+__all__ = ["EnhancedWebdriver"]
 
-from .EnhancedWebDriver import EnhancedWebDriver
+from .EnhancedWebdriver import EnhancedWebdriver

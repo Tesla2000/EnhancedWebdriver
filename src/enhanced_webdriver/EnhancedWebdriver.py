@@ -6,7 +6,7 @@ import urllib
 import zipfile
 from pathlib import Path
 from time import sleep
-from typing import Optional, Union
+from typing import Optional
 
 import requests
 from selenium import webdriver
@@ -15,9 +15,10 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
     WebDriverException,
-    ElementClickInterceptedException,
+    ElementClickInterceptedException, SessionNotCreatedException,
 )
 from selenium.webdriver import ActionChains
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -26,35 +27,51 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 
-class EnhancedWebDriver(WebDriver):
+class EnhancedWebdriver(WebDriver):
     """Webdriver with added functions that can decrease boilerplates. 
 
     :class:`EnhancedWebDriver` extends :class:`WebDriver` with additional features.
 
     """
+    _driver_name = "driver{}.exe" if "win" in platform.system() else "driver{}"
+
+    def __init__(self):
+        raise ValueError(
+            "__init__ function of EnhancedWebdriver shouldn't be used use EnhancedWebdriver.create to create driver instance.")
 
     @classmethod
     def create(
         cls,
         web_driver: Optional[WebDriver] = None,
-        executable_path: Union[Path, str] = None,
-    ) -> "EnhancedWebDriver":
+        options: Options = None,
+        service: Service = None,
+        keep_alive: bool = True,
+    ) -> "EnhancedWebdriver":
         """
         Create an instance of EnhancedWebDriver.
 
         :param web_driver: An optional instance of WebDriver.[WebDriver], optional
-        :param executable_path: Path to the webdriver executable.[Path, str], optional
+        :param keep_alive: Whether to configure ChromeRemoteConnection to use HTTP keep-alive
+        :param service: Service object for handling the browser driver if you need to pass extra details
+        :param options: this takes an instance of ChromeOptions
         :return: An instance of EnhancedWebDriver.
 
         """
-        instance = object.__new__(EnhancedWebDriver)
+        instance = object.__new__(EnhancedWebdriver)
         if web_driver is None:
-            if executable_path is None:
-                executable_path = Path(__file__).parent / "driver.exe"
-            if not Path(executable_path).exists():
-                cls._download_new_driver(executable_path)
-            service = Service(executable_path=executable_path)
-            web_driver = webdriver.Chrome(service=service)
+            try:
+                web_driver = webdriver.Chrome(options, service, keep_alive)
+            except SessionNotCreatedException as e:
+                version = re.findall(r'\d+\.\d+\.\d+\.\d+', e.msg)[0]
+                executable_path = Path(__file__).parent / cls._driver_name.format(version)
+                if not Path(executable_path).exists():
+                    cls._download_driver(executable_path, version)
+                for executable_file in Path(__file__).parent.glob(cls._driver_name.format('*')):
+                    if executable_file.name == executable_path.name:
+                        continue
+                    os.remove(executable_file)
+                service = Service(executable_path=str(executable_path))
+                web_driver = webdriver.Chrome(service=service)
         instance.__dict__ = web_driver.__dict__
         return instance
 
@@ -262,14 +279,14 @@ class EnhancedWebDriver(WebDriver):
 
         """
         return re.findall(
-            r"[\w\./:]+chrome-for-testing-public/[\d+\.]+",
+            r"[\w\./:]+chrome-for-testing-public/([\d+\.]+)",
             requests.get(
                 "https://googlechromelabs.github.io/chrome-for-testing/#stable"
             ).content.decode(),
         )[0]
 
     @classmethod
-    def _download_new_driver(cls, executable_path: Path) -> None:
+    def _download_driver(cls, executable_path: Path, version: str=None) -> None:
         """
         Download and install the latest Chrome driver.
 
@@ -278,8 +295,10 @@ class EnhancedWebDriver(WebDriver):
         """
         system = platform.system().lower().replace("dows", "")
         machine = re.findall(r"\d+", platform.machine())[-1]
+        if version is None:
+            version = cls._get_current_driver_version()
         urllib.request.urlretrieve(
-            "{}/{}{}/chromedriver-{}{}.zip".format(cls._get_current_driver_version(), system, machine, system, machine),
+            "https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(version, system, machine, system, machine),
             executable_path.with_suffix(".zip"),
         )
         with zipfile.ZipFile(executable_path.with_suffix(".zip")) as zip_ref:
@@ -287,7 +306,7 @@ class EnhancedWebDriver(WebDriver):
         shutil.move(
             next(next(executable_path.glob("*")).glob("c*")), executable_path.parent
         )
-        shutil.rmtree(executable_path.parent.joinpath("driver.exe"))
+        shutil.rmtree(executable_path.parent.joinpath(cls._driver_name.format(version)))
         os.remove(executable_path.with_suffix(".zip"))
         os.rename(next(executable_path.parent.glob("chromedrive*")), executable_path)
         current_permissions = os.stat(executable_path).st_mode
