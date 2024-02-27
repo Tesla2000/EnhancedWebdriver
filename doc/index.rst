@@ -7,9 +7,10 @@ Welcome to EnhancedWebdriver's documentation!
 =============================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 5
    :caption: Contents:
 
+   modules
 
 
 Indices and tables

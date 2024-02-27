@@ -16,3 +16,7 @@
 /docs/_templates/
 /test_upload.sh
 /create_documentation.sh
+/doc/_build/
+/doc/_static/
+/doc/_templates/
+/make_sphinx.sh

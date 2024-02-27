@@ -262,7 +262,7 @@ class EnhancedWebDriver(WebDriver):
 
         """
         return re.findall(
-            r"[\w./:]+chrome-for-testing-public/[\d+.]+",
+            r"[\w\./:]+chrome-for-testing-public/[\d+\.]+",
             requests.get(
                 "https://googlechromelabs.github.io/chrome-for-testing/#stable"
             ).content.decode(),

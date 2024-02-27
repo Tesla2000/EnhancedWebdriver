@@ -2,6 +2,7 @@
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
+import re
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parents[1].joinpath('src').absolute()))
 project = 'EnhancedWebdriver'
 copyright = '2024, Tesla200 (fratajczak124@gmail.com)'
 author = 'Tesla200 (fratajczak124@gmail.com)'
+release = re.findall(r'version = ([\d.]+)', Path(__file__).parents[1].joinpath('setup.cfg').read_text())[0]
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
