@@ -4,18 +4,19 @@ import re
 import shutil
 import urllib
 import zipfile
+import subprocess
 from pathlib import Path
 from time import sleep
 from typing import Optional
-
-import requests
+import undetected_chromedriver as uc
 from selenium import webdriver
 from selenium.common.exceptions import (
     StaleElementReferenceException,
     NoSuchElementException,
     TimeoutException,
     WebDriverException,
-    ElementClickInterceptedException, SessionNotCreatedException,
+    ElementClickInterceptedException,
+    SessionNotCreatedException,
 )
 from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
@@ -28,21 +29,24 @@ from selenium.webdriver.support.wait import WebDriverWait
 
 
 class EnhancedWebdriver(WebDriver):
-    """Webdriver with added functions that can decrease boilerplates. 
+    """Webdriver with added functions that can decrease boilerplates.
 
     :class:`EnhancedWebDriver` extends :class:`WebDriver` with additional features.
 
     """
+
     _driver_name = "driver{}.exe" if "win" in platform.system() else "driver{}"
 
     def __init__(self):
         raise ValueError(
-            "__init__ function of EnhancedWebdriver shouldn't be used use EnhancedWebdriver.create to create driver instance.")
+            "__init__ function of EnhancedWebdriver shouldn't be used use EnhancedWebdriver.create to create driver instance."
+        )
 
     @classmethod
     def create(
         cls,
         web_driver: Optional[WebDriver] = None,
+        undetected: bool = False,
         options: Options = None,
         service: Service = None,
         keep_alive: bool = True,
@@ -60,18 +64,40 @@ class EnhancedWebdriver(WebDriver):
         instance = object.__new__(EnhancedWebdriver)
         if web_driver is None:
             try:
-                web_driver = webdriver.Chrome(options, service, keep_alive)
-            except SessionNotCreatedException as e:
-                version = re.findall(r'\d+\.\d+\.\d+\.\d+', e.msg)[0]
-                executable_path = Path(__file__).parent / cls._driver_name.format(version)
+                if not undetected:
+                    web_driver = webdriver.Chrome(options, service, keep_alive)
+                elif service is not None:
+                    web_driver = uc.Chrome(
+                        options, driver_executable_path=service._path
+                    )
+                else:
+                    web_driver = uc.Chrome(
+                        options,
+                        driver_executable_path=next(
+                            Path(__file__).parent.glob(cls._driver_name.format("*"))
+                        ),
+                    )
+            except (SessionNotCreatedException, StopIteration) as e:
+                if hasattr(e, "msg"):
+                    version = re.findall(r"\d+\.\d+\.\d+\.\d+", e.msg)[0]
+                else:
+                    version = cls._get_chrome_version()
+                executable_path = Path(__file__).parent / cls._driver_name.format(
+                    version
+                )
                 if not Path(executable_path).exists():
                     cls._download_driver(executable_path, version)
-                for executable_file in Path(__file__).parent.glob(cls._driver_name.format('*')):
+                for executable_file in Path(__file__).parent.glob(
+                    cls._driver_name.format("*")
+                ):
                     if executable_file.name == executable_path.name:
                         continue
                     os.remove(executable_file)
-                service = Service(executable_path=str(executable_path))
-                web_driver = webdriver.Chrome(service=service)
+                if undetected:
+                    web_driver = uc.Chrome(driver_executable_path=executable_path)
+                else:
+                    service = Service(executable_path=str(executable_path))
+                    web_driver = webdriver.Chrome(service=service)
         instance.__dict__ = web_driver.__dict__
         return instance
 
@@ -107,7 +133,9 @@ class EnhancedWebdriver(WebDriver):
         """
         return self._wait(value, seconds, by).text
 
-    def is_element_present(self, value: str, seconds: float = 1, by: By = By.XPATH) -> bool:
+    def is_element_present(
+        self, value: str, seconds: float = 1, by: By = By.XPATH
+    ) -> bool:
         """
         Check if an element is present in the DOM.
 
@@ -123,7 +151,9 @@ class EnhancedWebdriver(WebDriver):
         except NoSuchElementException:
             return False
 
-    def is_element_selected(self, value: str, seconds: float = 1, by: By = By.XPATH) -> bool:
+    def is_element_selected(
+        self, value: str, seconds: float = 1, by: By = By.XPATH
+    ) -> bool:
         """
         Determine if the element is selected or not.
 
@@ -159,7 +189,9 @@ class EnhancedWebdriver(WebDriver):
         """
         return self.find_elements(by=by, value=element)
 
-    def write(self, value: str, keys: str, sleep_function=None, by: By = By.XPATH, time=10) -> bool:
+    def write(
+        self, value: str, keys: str, sleep_function=None, by: By = By.XPATH, time=10
+    ) -> bool:
         """
         Simulate typing into the element.
 
@@ -239,7 +271,11 @@ class EnhancedWebdriver(WebDriver):
         return canvas.screenshot_as_png
 
     def click_on_canvas(
-        self, offset_x: int, offset_y: int, canvas_path: str = "//canvas", right_click: bool = False
+        self,
+        offset_x: int,
+        offset_y: int,
+        canvas_path: str = "//canvas",
+        right_click: bool = False,
     ):
         """
         Click on a specific location on the canvas.
@@ -271,22 +307,41 @@ class EnhancedWebdriver(WebDriver):
         sleep(0.5)
 
     @staticmethod
-    def _get_current_driver_version() -> str:
-        """
-        Fetch the current Chrome driver version.
-
-        :return: Current Chrome driver version.
-
-        """
-        return re.findall(
-            r"[\w\./:]+chrome-for-testing-public/([\d+\.]+)",
-            requests.get(
-                "https://googlechromelabs.github.io/chrome-for-testing/#stable"
-            ).content.decode(),
-        )[0]
+    def _get_chrome_version():
+        system_platform = platform.system()
+        if system_platform == "Windows":
+            try:
+                output = subprocess.check_output(
+                    'reg query "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon" /v version',
+                    shell=True,
+                )
+                version_str = output.decode().split("    ")[3].strip()
+                return version_str
+            except Exception as e:
+                print("Error:", e)
+                return None
+        elif system_platform == "Linux":
+            try:
+                output = subprocess.check_output(["google-chrome", "--version"])
+                version_str = output.decode().split()[2]
+                return version_str
+            except Exception as e:
+                print("Error:", e)
+                return None
+        elif system_platform == "Darwin":
+            try:
+                output = subprocess.check_output(["google-chrome", "--version"])
+                version_str = output.decode().split()[2]
+                return version_str
+            except Exception as e:
+                print("Error:", e)
+                return None
+        else:
+            print("Unsupported operating system")
+            return None
 
     @classmethod
-    def _download_driver(cls, executable_path: Path, version: str=None) -> None:
+    def _download_driver(cls, executable_path: Path, version: str) -> None:
         """
         Download and install the latest Chrome driver.
 
@@ -295,10 +350,10 @@ class EnhancedWebdriver(WebDriver):
         """
         system = platform.system().lower().replace("dows", "")
         machine = re.findall(r"\d+", platform.machine())[-1]
-        if version is None:
-            version = cls._get_current_driver_version()
         urllib.request.urlretrieve(
-            "https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(version, system, machine, system, machine),
+            "https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(
+                version, system, machine, system, machine
+            ),
             executable_path.with_suffix(".zip"),
         )
         with zipfile.ZipFile(executable_path.with_suffix(".zip")) as zip_ref:
