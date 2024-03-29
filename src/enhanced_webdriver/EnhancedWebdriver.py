@@ -2,13 +2,13 @@ import os
 import platform
 import re
 import shutil
-import urllib
-import zipfile
 import subprocess
 from pathlib import Path
 from time import sleep
 from typing import Optional
+
 import undetected_chromedriver as uc
+from download import download
 from selenium import webdriver
 from selenium.common.exceptions import (
     StaleElementReferenceException,
@@ -16,7 +16,7 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     ElementClickInterceptedException,
-    SessionNotCreatedException,
+    SessionNotCreatedException, NoSuchDriverException,
 )
 from selenium.webdriver import ActionChains
 from selenium.webdriver.chrome.options import Options
@@ -77,16 +77,16 @@ class EnhancedWebdriver(WebDriver):
                             Path(__file__).parent.glob(cls._driver_name.format("*"))
                         ),
                     )
-            except (SessionNotCreatedException, StopIteration) as e:
-                if hasattr(e, "msg"):
-                    version = re.findall(r"\d+\.\d+\.\d+\.\d+", e.msg)[0]
+            except (SessionNotCreatedException, NoSuchDriverException, StopIteration) as e:
+                if isinstance(e, SessionNotCreatedException):
+                    current_browser_version = re.findall(r"\d+\.\d+\.\d+\.\d+", e.msg)[0]
                 else:
-                    version = cls._get_chrome_version()
+                    current_browser_version = cls._get_chrome_version()
                 executable_path = Path(__file__).parent / cls._driver_name.format(
-                    version
+                    current_browser_version
                 )
                 if not Path(executable_path).exists():
-                    cls._download_driver(executable_path, version)
+                    cls._download_new_driver(executable_path, current_browser_version)
                 for executable_file in Path(__file__).parent.glob(
                     cls._driver_name.format("*")
                 ):
@@ -341,7 +341,7 @@ class EnhancedWebdriver(WebDriver):
             return None
 
     @classmethod
-    def _download_driver(cls, executable_path: Path, version: str) -> None:
+    def _download_new_driver(cls, executable_path: Path, driver_version: str = None) -> None:
         """
         Download and install the latest Chrome driver.
 
@@ -350,20 +350,13 @@ class EnhancedWebdriver(WebDriver):
         """
         system = platform.system().lower().replace("dows", "")
         machine = re.findall(r"\d+", platform.machine())[-1]
-        urllib.request.urlretrieve(
-            "https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(
-                version, system, machine, system, machine
-            ),
-            executable_path.with_suffix(".zip"),
-        )
-        with zipfile.ZipFile(executable_path.with_suffix(".zip")) as zip_ref:
-            zip_ref.extractall(executable_path)
-        shutil.move(
-            next(next(executable_path.glob("*")).glob("c*")), executable_path.parent
-        )
-        shutil.rmtree(executable_path.parent.joinpath(cls._driver_name.format(version)))
-        os.remove(executable_path.with_suffix(".zip"))
-        os.rename(next(executable_path.parent.glob("chromedrive*")), executable_path)
+        download("https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(
+            driver_version, system, machine, system, machine
+        ), str(executable_path), replace=True, kind='zip')
+        operator = next(next(executable_path.glob('*')).glob('c*')).read_bytes()
+        shutil.rmtree(executable_path)
+        executable_path.write_bytes(operator)
+        del operator
         current_permissions = os.stat(executable_path).st_mode
         new_permissions = current_permissions | 0o111
         os.chmod(executable_path, new_permissions)
