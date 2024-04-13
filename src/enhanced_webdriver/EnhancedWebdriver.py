@@ -7,7 +7,7 @@ from pathlib import Path
 from time import sleep
 from typing import Optional
 
-import undetected_chromedriver as uc
+from retry import retry
 from download import download
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -67,10 +67,12 @@ class EnhancedWebdriver(WebDriver):
                 if not undetected:
                     web_driver = webdriver.Chrome(options, service, keep_alive)
                 elif service is not None:
+                    import undetected_chromedriver as uc
                     web_driver = uc.Chrome(
                         options, driver_executable_path=service._path
                     )
                 else:
+                    import undetected_chromedriver as uc
                     web_driver = uc.Chrome(
                         options,
                         driver_executable_path=next(
@@ -94,6 +96,7 @@ class EnhancedWebdriver(WebDriver):
                         continue
                     os.remove(executable_file)
                 if undetected:
+                    import undetected_chromedriver as uc
                     web_driver = uc.Chrome(driver_executable_path=executable_path)
                 else:
                     service = Service(executable_path=str(executable_path))
@@ -121,6 +124,7 @@ class EnhancedWebdriver(WebDriver):
         """
         self.quit()
 
+    @retry(tries=5, delay=1)
     def get_text_of_element(self, value: str, by: By = By.XPATH, seconds=1) -> str:
         """
         Get the visible (i.e., not hidden by CSS) innerText of this element.
@@ -133,6 +137,7 @@ class EnhancedWebdriver(WebDriver):
         """
         return self._wait(value, seconds, by).text
 
+    @retry(tries=5, delay=1)
     def is_element_present(
         self, value: str, seconds: float = 1, by: By = By.XPATH
     ) -> bool:
@@ -151,6 +156,7 @@ class EnhancedWebdriver(WebDriver):
         except NoSuchElementException:
             return False
 
+    @retry(tries=5, delay=1)
     def is_element_selected(
         self, value: str, seconds: float = 1, by: By = By.XPATH
     ) -> bool:
@@ -165,6 +171,7 @@ class EnhancedWebdriver(WebDriver):
         """
         return self._wait(value, seconds, by).is_selected()
 
+    @retry(tries=5, delay=1)
     def get_attribute(self, value: str, dtype: str, by: By = By.XPATH, seconds=10):
         """
         Get the value of the specified attribute of the element.
@@ -178,6 +185,7 @@ class EnhancedWebdriver(WebDriver):
         """
         return self._wait(value, seconds, by).get_attribute(dtype)
 
+    @retry(tries=5, delay=1)
     def get_all_elements(self, element, by: By = By.XPATH):
         """
         Find all elements within the current context using the given mechanism.
@@ -189,6 +197,7 @@ class EnhancedWebdriver(WebDriver):
         """
         return self.find_elements(by=by, value=element)
 
+    @retry(tries=5, delay=1)
     def write(
         self, value: str, keys: str, sleep_function=None, by: By = By.XPATH, time=10
     ) -> bool:
@@ -213,6 +222,7 @@ class EnhancedWebdriver(WebDriver):
             return False
         return True
 
+    @retry(tries=5, delay=1)
     def click(self, value: str, sleep_function=None, by: By = By.XPATH, seconds=1):
         """
         Click on an element.
@@ -247,6 +257,7 @@ class EnhancedWebdriver(WebDriver):
             return False
         return True
 
+    @retry(tries=5, delay=1)
     def wait_and_click_js(self, value: str, time=1, by: By = By.XPATH):
         """
         Wait for an element to be present in the DOM and click using JavaScript.
@@ -259,6 +270,7 @@ class EnhancedWebdriver(WebDriver):
         element = self._wait(value, time, by)
         self.execute_script("arguments[0].click();", element)
 
+    @retry(tries=5, delay=1)
     def get_canvas(self, canvas_path: str = "//canvas"):
         """
         Get a screenshot of the canvas.
@@ -270,6 +282,7 @@ class EnhancedWebdriver(WebDriver):
         canvas = self._wait(canvas_path)
         return canvas.screenshot_as_png
 
+    @retry(tries=5, delay=1)
     def click_on_canvas(
         self,
         offset_x: int,
@@ -361,6 +374,7 @@ class EnhancedWebdriver(WebDriver):
         new_permissions = current_permissions | 0o111
         os.chmod(executable_path, new_permissions)
 
+    @retry(tries=5, delay=1)
     def _wait(self, value: str, seconds: float = 1, by: By = By.XPATH) -> WebElement:
         """
         Wait for an element to be present in the DOM and return it.
