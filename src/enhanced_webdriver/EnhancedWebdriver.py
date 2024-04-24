@@ -39,7 +39,7 @@ class EnhancedWebdriver(WebDriver):
 
     def __init__(self):
         raise ValueError(
-            "__init__ function of EnhancedWebdriver shouldn't be used use EnhancedWebdriver.create to create driver instance."
+            "__init__ function of EnhancedWebdriver shouldn't be used. Use EnhancedWebdriver.create to create driver instance."
         )
 
     @classmethod
@@ -47,7 +47,7 @@ class EnhancedWebdriver(WebDriver):
         cls,
         web_driver: Optional[WebDriver] = None,
         undetected: bool = False,
-        options: Options = None,
+        options: BaseOptions = None,
         service: Service = None,
         keep_alive: bool = True,
     ) -> "EnhancedWebdriver":
@@ -55,6 +55,7 @@ class EnhancedWebdriver(WebDriver):
         Create an instance of EnhancedWebDriver.
 
         :param web_driver: An optional instance of WebDriver.[WebDriver], optional
+        :param undetected: Whether to run an instance of UndetectedChromedriver
         :param keep_alive: Whether to configure ChromeRemoteConnection to use HTTP keep-alive
         :param service: Service object for handling the browser driver if you need to pass extra details
         :param options: this takes an instance of ChromeOptions
