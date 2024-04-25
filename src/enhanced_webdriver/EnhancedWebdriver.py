@@ -1,14 +1,8 @@
-import os
-import platform
-import re
-import shutil
-import subprocess
-from pathlib import Path
 from time import sleep
 from typing import Optional
 
+import chromedriver_autoinstaller
 from retry import retry
-from download import download
 from selenium import webdriver
 from selenium.common.exceptions import (
     StaleElementReferenceException,
@@ -16,16 +10,15 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
     ElementClickInterceptedException,
-    SessionNotCreatedException, NoSuchDriverException,
 )
 from selenium.webdriver import ActionChains
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
+from undetected_chromedriver import ChromeOptions
 
 
 class EnhancedWebdriver(WebDriver):
@@ -35,11 +28,11 @@ class EnhancedWebdriver(WebDriver):
 
     """
 
-    _driver_name = "driver{}.exe" if "win" in platform.system() else "driver{}"
-
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         raise ValueError(
-            "__init__ function of EnhancedWebdriver shouldn't be used. Use EnhancedWebdriver.create to create driver instance."
+            "__init__ function of EnhancedWebdriver shouldn't be used."
+            " Use EnhancedWebdriver.create to create driver instance."
         )
 
     @classmethod
@@ -47,7 +40,7 @@ class EnhancedWebdriver(WebDriver):
         cls,
         web_driver: Optional[WebDriver] = None,
         undetected: bool = False,
-        options: BaseOptions = None,
+        options: ChromeOptions = None,
         service: Service = None,
         keep_alive: bool = True,
     ) -> "EnhancedWebdriver":
@@ -64,44 +57,15 @@ class EnhancedWebdriver(WebDriver):
         """
         instance = object.__new__(EnhancedWebdriver)
         if web_driver is None:
-            try:
-                if not undetected:
-                    web_driver = webdriver.Chrome(options, service, keep_alive)
-                elif service is not None:
-                    import undetected_chromedriver as uc
-                    web_driver = uc.Chrome(
-                        options, driver_executable_path=service._path
-                    )
-                else:
-                    import undetected_chromedriver as uc
-                    web_driver = uc.Chrome(
-                        options,
-                        driver_executable_path=next(
-                            Path(__file__).parent.glob(cls._driver_name.format("*"))
-                        ),
-                    )
-            except (SessionNotCreatedException, NoSuchDriverException, StopIteration) as e:
-                if isinstance(e, SessionNotCreatedException):
-                    current_browser_version = re.findall(r"\d+\.\d+\.\d+\.\d+", e.msg)[0]
-                else:
-                    current_browser_version = cls._get_chrome_version()
-                executable_path = Path(__file__).parent / cls._driver_name.format(
-                    current_browser_version
+            chromedriver_autoinstaller.install()
+            if not undetected:
+                web_driver = webdriver.Chrome(
+                    options=options, service=service, keep_alive=keep_alive
                 )
-                if not Path(executable_path).exists():
-                    cls._download_new_driver(executable_path, current_browser_version)
-                for executable_file in Path(__file__).parent.glob(
-                    cls._driver_name.format("*")
-                ):
-                    if executable_file.name == executable_path.name:
-                        continue
-                    os.remove(executable_file)
-                if undetected:
-                    import undetected_chromedriver as uc
-                    web_driver = uc.Chrome(driver_executable_path=executable_path)
-                else:
-                    service = Service(executable_path=str(executable_path))
-                    web_driver = webdriver.Chrome(service=service)
+            else:
+                import undetected_chromedriver as uc
+
+                web_driver = uc.Chrome(chrome_options=options, service_args=service)
         instance.__dict__ = web_driver.__dict__
         return instance
 
@@ -319,61 +283,6 @@ class EnhancedWebdriver(WebDriver):
         """Scroll up the webpage."""
         self.execute_script("window.scrollTo(0,-250)")
         sleep(0.5)
-
-    @staticmethod
-    def _get_chrome_version():
-        system_platform = platform.system()
-        if system_platform == "Windows":
-            try:
-                output = subprocess.check_output(
-                    'reg query "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon" /v version',
-                    shell=True,
-                )
-                version_str = output.decode().split("    ")[3].strip()
-                return version_str
-            except Exception as e:
-                print("Error:", e)
-                return None
-        elif system_platform == "Linux":
-            try:
-                output = subprocess.check_output(["google-chrome", "--version"])
-                version_str = output.decode().split()[2]
-                return version_str
-            except Exception as e:
-                print("Error:", e)
-                return None
-        elif system_platform == "Darwin":
-            try:
-                output = subprocess.check_output(["google-chrome", "--version"])
-                version_str = output.decode().split()[2]
-                return version_str
-            except Exception as e:
-                print("Error:", e)
-                return None
-        else:
-            print("Unsupported operating system")
-            return None
-
-    @classmethod
-    def _download_new_driver(cls, executable_path: Path, driver_version: str = None) -> None:
-        """
-        Download and install the latest Chrome driver.
-
-        :param executable_path: Path to store the downloaded driver.
-
-        """
-        system = platform.system().lower().replace("dows", "")
-        machine = re.findall(r"\d+", platform.machine())[-1]
-        download("https://storage.googleapis.com/chrome-for-testing-public/{}/{}{}/chromedriver-{}{}.zip".format(
-            driver_version, system, machine, system, machine
-        ), str(executable_path), replace=True, kind='zip')
-        operator = next(next(executable_path.glob('*')).glob('c*')).read_bytes()
-        shutil.rmtree(executable_path)
-        executable_path.write_bytes(operator)
-        del operator
-        current_permissions = os.stat(executable_path).st_mode
-        new_permissions = current_permissions | 0o111
-        os.chmod(executable_path, new_permissions)
 
     @retry(tries=5, delay=1)
     def _wait(self, value: str, seconds: float = 1, by: By = By.XPATH) -> WebElement:
