@@ -65,7 +65,7 @@ class EnhancedWebdriver(WebDriver):
             else:
                 import undetected_chromedriver as uc
 
-                web_driver = uc.Chrome(chrome_options=options, service_args=service)
+                web_driver = uc.Chrome(options=options, service_args=service, keep_alive=keep_alive)
         instance.__dict__ = web_driver.__dict__
         return instance
 
