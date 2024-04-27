@@ -100,7 +100,8 @@ class EnhancedWebdriver(WebDriver):
         :return: The innerText of the element.
 
         """
-        return self._wait(value, seconds, by).text
+        elem = self._wait(value, seconds, by)
+        return elem.text or elem.get_attribute("textContent")
 
     @retry(tries=5, delay=1)
     def is_element_present(
