@@ -1,5 +1,7 @@
+import typing
 from time import sleep
 from typing import Optional
+from contextlib import suppress
 
 import chromedriver_autoinstaller
 from retry import retry
@@ -18,7 +20,9 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
-from undetected_chromedriver import ChromeOptions
+
+if typing.TYPE_CHECKING:
+    from undetected_chromedriver import ChromeOptions
 
 
 class EnhancedWebdriver(WebDriver):
@@ -40,7 +44,7 @@ class EnhancedWebdriver(WebDriver):
         cls,
         web_driver: Optional[WebDriver] = None,
         undetected: bool = False,
-        options: ChromeOptions = None,
+        options: "ChromeOptions" = None,
         service: Service = None,
         keep_alive: bool = True,
     ) -> "EnhancedWebdriver":
@@ -100,7 +104,7 @@ class EnhancedWebdriver(WebDriver):
         :return: The innerText of the element.
 
         """
-        elem = self._wait(value, seconds, by)
+        elem = self.get_element(value, seconds, by)
         return elem.text or elem.get_attribute("textContent")
 
     @retry(tries=5, delay=1)
@@ -117,7 +121,7 @@ class EnhancedWebdriver(WebDriver):
 
         """
         try:
-            self._wait(value, seconds, by)
+            self.get_element(value, seconds, by)
             return True
         except NoSuchElementException:
             return False
@@ -135,7 +139,23 @@ class EnhancedWebdriver(WebDriver):
         :return: True if the element is selected, False otherwise.
 
         """
-        return self._wait(value, seconds, by).is_selected()
+        return self.get_element(value, seconds, by).is_selected()
+
+    def is_element_displayed(
+        self, value: str, seconds: float = 1, by: By = By.XPATH
+    ) -> bool:
+        """
+        Determine if the element is selected or not.
+
+        :param value: Locator value of the element.
+        :param seconds: Maximum time to wait for the element, defaults to 1.
+        :param by: Locator strategy, defaults to By.XPATH.
+        :return: True if the element is selected, False otherwise.
+
+        """
+        with suppress(NoSuchElementException):
+            return self.get_element(value, seconds, by).is_displayed()
+        return False
 
     @retry(tries=5, delay=1)
     def get_attribute(self, value: str, dtype: str, by: By = By.XPATH, seconds=10):
@@ -149,12 +169,12 @@ class EnhancedWebdriver(WebDriver):
         :return: The value of the attribute.
 
         """
-        return self._wait(value, seconds, by).get_attribute(dtype)
+        return self.get_element(value, seconds, by).get_attribute(dtype)
 
     @retry(tries=5, delay=1)
     def get_all_elements(self, element, by: By = By.XPATH):
         """
-        Find all elements within the current context using the given mechanism.
+        Find all element within the current context using the given mechanism.
 
         :param element: Locator value of the element.
         :param by: Locator strategy, defaults to By.XPATH.
@@ -179,7 +199,7 @@ class EnhancedWebdriver(WebDriver):
 
         """
         try:
-            element = self._wait(value, time, by)
+            element = self.get_element(value, time, by)
             element.clear()
             element.send_keys(str(keys))
             if sleep_function:
@@ -201,7 +221,7 @@ class EnhancedWebdriver(WebDriver):
 
         """
         try:
-            element = self._wait(value, seconds, by)
+            element = self.get_element(value, seconds, by)
             WebDriverWait(self, seconds).until(
                 expected_conditions.element_to_be_clickable(element)
             ).click()
@@ -212,7 +232,7 @@ class EnhancedWebdriver(WebDriver):
             sleep(0.01)
             WebDriverWait(self, seconds).until(
                 expected_conditions.element_to_be_clickable(
-                    self._wait(value, seconds, by)
+                    self.get_element(value, seconds, by)
                 )
             ).click()
         except (
@@ -233,7 +253,7 @@ class EnhancedWebdriver(WebDriver):
         :param by: Locator strategy, defaults to By.XPATH.
 
         """
-        element = self._wait(value, time, by)
+        element = self.get_element(value, time, by)
         self.execute_script("arguments[0].click();", element)
 
     @retry(tries=5, delay=1)
@@ -245,7 +265,7 @@ class EnhancedWebdriver(WebDriver):
         :return: Screenshot of the canvas.
 
         """
-        canvas = self._wait(canvas_path)
+        canvas = self.get_element(canvas_path)
         return canvas.screenshot_as_png
 
     @retry(tries=5, delay=1)
@@ -265,7 +285,7 @@ class EnhancedWebdriver(WebDriver):
         :param right_click: Whether to perform a right click, defaults to False.
 
         """
-        canvas = self._wait(canvas_path)
+        canvas = self.get_element(canvas_path)
         if right_click:
             ActionChains(self).move_to_element(canvas).move_by_offset(
                 offset_x, offset_y
@@ -286,7 +306,7 @@ class EnhancedWebdriver(WebDriver):
         sleep(0.5)
 
     @retry(tries=5, delay=1)
-    def _wait(self, value: str, seconds: float = 1, by: By = By.XPATH) -> WebElement:
+    def get_element(self, value: str, seconds: float = 1, by: By = By.XPATH) -> WebElement:
         """
         Wait for an element to be present in the DOM and return it.
 
